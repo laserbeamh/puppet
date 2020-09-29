@@ -1,0 +1,4 @@
+### Bolt ###
+Open-source, agentless, multi-platform automation tool
+Bolt task runner driven through CLI
+	executes commands via SSH and WinRM
