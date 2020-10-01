@@ -2,3 +2,313 @@
 Open-source, agentless, multi-platform automation tool
 Bolt task runner driven through CLI
 	executes commands via SSH and WinRM
+	
+puppet tasks - solve problems that don't fit well into Puppet's traditional model
+
+puppet built on idea of enforcing state over time.
+	master checks state of agent
+	fix if wrong
+	send a report from agent to master if anything was changed
+	
+sometimes we just need to make something happen and be done with it (point in time)
+	this is where puppet tasks come in
+	
+can use orchestrator-driven tasks (uses puppet infrastructure) or standalone tasks
+
+Puppet Bolt pup.pt/installbolt
+package = puppet-bolt
+command = bolt
+
+If you have credentials on remote machines, can use bolt to run commands across systems
+	bolt command run 'actual command' -n <comma-separated list of nodes> -u <user>
+		-n = nodes to run on
+
+puppet script can be in any scripting language
+bolt script run ./<name of script> -n <list of nodes>
+
+tasks have api and metadata
+tasks api defines:
+	how a program should expect to receive input from task engine
+	what output ought to look like when it exits
+	
+Tasks will prefix any param passed to it with $PT_<paramname>
+
+tasks live inside of puppet modules
+	referred to as modulename::taskfilename
+
+bolt task run modulename::taskfilename -n <nodes> -u <user> <paramname>='<paramvalue>'
+
+puppet development kit (PDK)
+
+metadata - provides info about task, written in json, lives in task directory, should have same name
+	includes summary of what task does, input-method key, list of needed files, list of expected params, etc (basically inline documentation)
+	
+bolt task show modulename::taskfilename
+
+Tasks are a simple and quick way to immediately upgrade packages, debug your infrastructures, restart services, or perform any other type of single-action executions on your nodes.
+
+need access to API
+can repeat tasks using the job ID:
+    puppet job show <job id>
+
+e.g. of a minimum useful json file for a task:
+{
+  "description": "Returns the number of yum packages installed"
+}
+
+Jobs that are simple one-time actions, or jobs that must be orchestrated across multiple nodes in the correct sequence, are great candidates for tasks.
+
+Puppet meant to manage resources on a server in infrastructure
+
+resource is a piece of puppet code that manages a characteristic of a server (same as what you'd run on cli)
+
+puppet class - contains resources that all work together to configure something (e.g. webserver)
+
+entire class can be applied
+
+classes can be grouped as a module
+
+module contains a collection of related classes working together to configure a specific piece of software or settings on a server
+
+Resources are the fundamental unit for modeling system configurations (building block)
+resource describes some aspect of the system
+resource declaration - describes a resource
+
+resources can be combined to represent the desired config of a system - order doesn't matter
+
+resources written using declarative modeling language
+
+resource { 'title':
+    attribute => value,
+}
+
+can have multiple attribute/value pairs - always end in comma
+type and title must be unique for a given node
+quote strings
+similar resources can be grouped into types
+
+description of a resource can be abstracted away from its implementation
+
+resource abstraction layer (RAL) - splits resources into types, high level models, providers
+
+1+ provider for each resource
+
+RAL queries current state, compares against desired type
+
+resource declaration adds resource to catalogue
+
+can't declare same resource twice
+
+title and name used for duplicates
+
+Puppet Resource is a cli tool
+puppet resource [type] [title]
+
+classes define a collection of resources that are managed together as a single unit
+
+resource declaration is core of puppet
+
+puppet manifest is file ending in .pp
+
+
+*****to create a file:*****
+file { "file_name":
+    path => "absolute/path/to/file.txt",
+    content => "Content of the file",
+}
+
+
+classes define a collection of resource managed together as a single unit
+
+class definitions are contained in manifests (.pp files)
+
+a class contains all its resources
+
+class name (params) {
+    resource declaration(s)
+}
+
+to define a class is to specify the contents and behavior of a class. does not automatically include it
+
+declaring a class adds it to the catalogue and tells puppet to manage it
+
+must declare a class to use it
+
+use the "include" keyword e.g.:
+include <class_name>
+or 
+class {"<class_name":}
+
+classes are reusable, but can only be used once on a given node (singleton) 
+
+classes cannot be redeclared
+
+multiple classes can be declared together to represent a role
+
+node "name" {
+    include ssh
+    include apache
+    include mysql
+    include web-app
+}
+
+manifests hold class definitions and additional logic
+order of resources in a manifest does not matter. Puppet assumes most resources are not related to each other and will manage the resources in whatever order is most efficient.
+
+must explicitly declare relationships if resources should be managed in a specific order
+
+metaparameters - attributes which can be used with every resource type - most commonly used to express relationships
+
+relationship metaparameters:
+*********
+before - causes resource to be applied before the target resource (put in the resource that happens first)
+
+package { 'openssh-server':
+    ensure => present,
+    before => File['/etc/ssh/sshd_config'],
+}
+
+**********
+require causes resource to be applied after the target resource (put in the resource that happens second)
+
+file { 'etc/ssh/sshd_config':
+    ensure => file,
+    mode => 600,
+    source => 'puppet:///modules/sshd/sshd_config,
+    require => Package['openssh-server'],
+}
+
+**********
+notify (works like before) - causes resource to be applied before the target resource. notifying resource will refresh if the notifying resource changes
+
+file { 'etc/ssh/sshd_config':
+    ensure => file,
+    mode => 600,
+    source => 'puppet:///modules/sshd/sshd_config,
+    notify => Service['sshd'],
+}
+
+**********
+subscribe (works like require) - causes resource to be applied after the target resource. subscribing resource will refresh if the notifying resource changes
+
+service { 'sshd':
+    ensure => running,
+    enable => true,
+    subscribe => File['/etc/ssh/sshd_config'],
+}
+
+**********
+ordering/chaining arrows ( -> ) specify relationships (before/require)
+notification/chaining arrows ( ~> ) (notify/subscribe)
+
+resources define the end state of a server, not the steps required to achieve that state.
+you write the end state, puppet figures out how to achieve it.
+
+type - thing that is going to be managed like file
+title - basically the filepath
+=> = hash rocket
+attributes must be separated by commas
+
+to write a resource declaration:
+file { '/etc/motd':
+    ensure => 'file',
+    content => 'Hello world',
+    owner => 'root',
+    group => 'root,
+    mode => '0644',
+}
+
+every resource has a type, title, and a list of attributes
+type - describes what kind of configuration the resource manages and provides "knobs and settings" for configuring that resource. https://puppet.com/docs/puppet/latest/type.html
+
+title - name of the item you're managing. for files it's usually the /path/to/file. for services - name of daemon
+
+attributes describe the desired state of the resource. they are the "knobs and settings" that let you describe the desired state
+
+each attribute must have a value.
+
+puppet resource command shows you all the attributes
+puppet resource type name
+
+Puppet knows about a resource as well as their values
+
+agree on style guide with coworkers - tabs vs spaces, etc
+puppet parser validate manifest_name.pp will validate for you
+
+https://puppet.com/docs/puppet/latest/lang_visual_index.html
+https://validate.puppet.com/
+
+Runbook is a compilation of routine procedures and operations that the system administrator or operator carries out.
+
+package type manages software packages. often seen with ensure to install a package. may include source and provider as well
+
+can use puppet facts to retrieve information about the server you're configuring
+
+the fqdn fact contains the fqdn for the server
+
+facts - variables created by puppet with information integral to a node, such as OS, hostname, IP address
+
+facts are commonly used in conditional logic expressions in puppet.
+
+'facter -p' will show a list of all the facts available on any system with puppet installed
+
+can use them in resources (e.g.):
+file { '/etc/motd':
+  content => "My hostname: ${hostname}",
+}
+
+${var_name} to call a variable
+
+service resource type manages a service running on the node
+important attributes for service type are:
+ensure, enable, hasrestart, hasstatus
+
+'puppet resource service puppet' shows all attributes of the service named puppet
+
+only need to specify relationships between resources that are order-dependent
+
+when referring to another resource with before/require, the resource type is capitalized
+
+notify/subscribe sends a refresh
+
+when you refresh a service resource type, puppet restarts the service
+when you refresh a mount resource type, puppet remounts a file mount
+
+not all resource types will respond to a refresh
+
+notify = before + refresh
+subscribe = require + refresh
+
+Package File Service - common pattern for manifests (still needs relationship attributes)
+
+Core types - the most essential types you'll use to interact with puppet/tell it what to do. they're included with puppet.
+    file, package, service are all core types
+https://puppet.com/docs/puppet/5.3/type.html
+
+package type manages software packages
+important attributes include: name, ensure, source, provider
+
+service type manages services running on the node
+important attributes include: name, ensure, enable, hasrestart, hasstatus
+
+assign repeating values to variables
+
+e.g.:
+$file_share_path = '/path/to/file/share'
+file { "${file_share_path}/manager":
+  ensure => directory,
+}
+file { "${file_share_path}/developer":
+  ensure => directory,
+}
+file { "${file_share_path}/engineer":
+  ensure => directory,
+}
+
+must use double quotes for string variables:
+
+$my_variable = 'Hello '
+"${my_variable}world" #translates to 'Hello world'
+'${my_variable}world' #translates to '${my_variable}world'
+
+comments use hashes #
