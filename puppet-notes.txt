@@ -312,3 +312,8 @@ $my_variable = 'Hello '
 '${my_variable}world' #translates to '${my_variable}world'
 
 comments use hashes #
+
+
+to apply changes:
+puppet apply <params> file
+https://linux.die.net/man/8/puppet-apply
